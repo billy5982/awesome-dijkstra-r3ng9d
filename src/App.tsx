@@ -7,29 +7,36 @@ import {
   ColumnHeaderClickedEvent,
   GridApi,
   ModuleRegistry,
+  ProvidedColumnGroup,
   type ColDef,
 } from 'ag-grid-community';
 import './App.scss';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-type HeaderInfo = {
+interface HeaderInfo {
   node: Column | ColumnGroup;
   id: string; // colId or groupId
   kind: 'col' | 'group';
   depth: number; // 헤더 row depth (0,1,2,...)
   leafStart: number; // 이 헤더가 커버하는 leaf index 시작
   leafEnd: number; // 이 헤더가 커버하는 leaf index 끝
-};
+  instanceId: string;
+}
 
-// 🔹 getAllDisplayedColumnGroups() 만 사용, Map 대신 배열로
+interface SelectInfo {
+  id: string;
+  instanceId: string;
+}
+
+// 🔹 getAllDisplayedColumnGroups() 만 사용
 const buildHeaderModelFromGroups = (columnApi: GridApi): HeaderInfo[] => {
-  const roots = columnApi.getAllDisplayedColumnGroups() as (Column | ColumnGroup)[];
+  const roots = columnApi.getAllDisplayedColumnGroups();
   const headers: HeaderInfo[] = [];
   let leafCounter = 0; // leaf index 직접 증가시킴
 
   const processNode = (node: Column | ColumnGroup, depth: number): { start: number; end: number } | null => {
-    const anyNode = node;
+    const anyNode = node as any;
 
     // ✅ leaf column
     if (anyNode.isColumn) {
@@ -44,13 +51,14 @@ const buildHeaderModelFromGroups = (columnApi: GridApi): HeaderInfo[] => {
         depth,
         leafStart: idx,
         leafEnd: idx,
+        instanceId: (col as any).intanceId,
       });
 
       return { start: idx, end: idx };
     }
 
     // ✅ group
-    const group = node as any;
+    const group = node as ColumnGroup;
 
     // padding / wrapper group 은 자기 자신은 만들지 않고 children만 처리
     if (group.isPadding && group.isPadding()) {
@@ -81,6 +89,7 @@ const buildHeaderModelFromGroups = (columnApi: GridApi): HeaderInfo[] => {
     // 그룹 헤더를 children 보다 먼저 나오게 하려면,
     // 일단 placeholder 를 넣고 나중에 leafStart/leafEnd 채움
     const idxInHeaders = headers.length;
+
     headers.push({
       node: group,
       id: group.getGroupId(),
@@ -88,6 +97,7 @@ const buildHeaderModelFromGroups = (columnApi: GridApi): HeaderInfo[] => {
       depth,
       leafStart: 0,
       leafEnd: 0,
+      instanceId: (group as any).intanceId,
     });
 
     let min = Infinity;
@@ -115,8 +125,7 @@ const buildHeaderModelFromGroups = (columnApi: GridApi): HeaderInfo[] => {
     return { start: min, end: max };
   };
 
-  roots.forEach(root => processNode(root, 0));
-
+  roots?.forEach(root => processNode(root, 0));
   return headers;
 };
 
@@ -164,35 +173,34 @@ const computeSelectionFromGroups = (model: HeaderInfo[], anchorId: string, targe
 
 function App() {
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
-  const lastClickedIdRef = useRef<string | null>(null);
+  const lastClickedIdRef = useRef<SelectInfo | null>(null);
   const [pressShift, setPressShift] = useState<boolean>(false);
 
   const onColumnHeaderClicked = (params: ColumnHeaderClickedEvent) => {
     // Column | ProvidedColumnGroup 둘 다 여기로 들어옴
-    const colOrGroup = params.column as any;
-    const id =
-      typeof colOrGroup.getColId === 'function'
-        ? colOrGroup.getColId()
-        : typeof colOrGroup.getGroupId === 'function'
-          ? colOrGroup.getGroupId()
-          : null;
+    const colOrGroup = params.column;
 
-    if (!id) return;
+    const id = colOrGroup.isColumn ? colOrGroup.getUniqueId() : colOrGroup.getGroupId();
+
+    console.log('params.api.getFocusedCell() :', params.api.findGetActiveMatch());
+    // const instanceId = colOrGroup.colIdSanitised ?? '';
+
+    // if (!id) return;
 
     // ✅ getAllDisplayedColumnGroups 기반 최신 뷰 모델
-    const model = buildHeaderModelFromGroups((params as any).columnApi ?? (params as any).api);
-    // console.log('model:', model);
+    const model = buildHeaderModelFromGroups(params.api);
 
     setSelectedCols(prev => {
       if (pressShift && lastClickedIdRef.current) {
-        const { selectedIds } = computeSelectionFromGroups(model, lastClickedIdRef.current, id);
-        lastClickedIdRef.current = id;
-        return selectedIds;
+        // const { selectedIds } = computeSelectionFromGroups(model, lastClickedIdRef.current.id, id);
+        // lastClickedIdRef.current = { id, instanceId };
+        // return selectedIds;
       }
 
       // 그냥 클릭이면 단일 선택
-      lastClickedIdRef.current = id;
-      return [id];
+      // lastClickedIdRef.current = { id, instanceId };
+      // return [id];
+      return [];
     });
   };
 
@@ -219,8 +227,8 @@ function App() {
   }, []);
 
   const headerClass: ColDef['headerClass'] = params => {
-    const group = params.columnGroup as any;
-    const col = params.column as any;
+    const group = params.columnGroup;
+    const col = params.column;
 
     if (group) {
       const gid = typeof group.getGroupId === 'function' ? group.getGroupId() : '';
@@ -271,6 +279,7 @@ function App() {
                     headerName: 'A1-3-1',
                     field: 'a13',
                     colId: 'A1_3_1',
+                    pinned: 'left',
                     headerClass,
                   },
                   {
