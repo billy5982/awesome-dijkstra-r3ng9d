@@ -242,14 +242,24 @@ const computeSelectionFromGroups = (
   // 2-1️⃣ band 안에 "full-depth 헤더" 가 하나라도 있으면
   //      → 같은 행(minDepth)에 있는 형제 헤더 전체로 band 확장
   // "full-depth 헤더"가 원래 band 안에 완전히 들어온 경우가 있는지
-  const existsFullDepthInBand = model.some(
-    h => isFullDepthHeader(model, h, minDepth) && h.leafStart >= origStart && h.leafEnd <= origEnd
-  );
+  const existsFullDepthInBand = model.filter(h => h.leafStart > origStart && h.leafEnd < origEnd);
 
-  if (existsFullDepthInBand) {
+  const bandMinDepth = Math.min(...existsFullDepthInBand.map(h => h.depthStart));
+
+  const existsFullDepthInBand2 = existsFullDepthInBand.filter(h => {
+    return isFullDepthHeader(model, h, bandMinDepth);
+  });
+
+  if (existsFullDepthInBand2) {
     const sameRowHeaders = model.filter(
-      h => h.depthStart === minDepth && h.leafStart >= origStart && h.leafEnd <= origEnd
+      h =>
+        h.depthStart === bandMinDepth &&
+        // 밴드와 leaf 구간이 한 칸이라도 겹치면 포함
+        h.leafEnd >= origStart &&
+        h.leafStart <= origEnd
     );
+
+    console.log(' sameRowHeaders:', sameRowHeaders);
 
     if (sameRowHeaders.length > 0) {
       const minStart = Math.min(...sameRowHeaders.map(r => r.leafStart));
