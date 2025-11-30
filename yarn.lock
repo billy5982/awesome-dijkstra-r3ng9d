@@ -522,6 +522,35 @@
     react-refresh "^0.13.0"
     resolve "^1.22.0"
 
+ag-charts-community@12.3.1:
+  version "12.3.1"
+  resolved "https://registry.yarnpkg.com/ag-charts-community/-/ag-charts-community-12.3.1.tgz#11d249e0f52323976879805fa9fd63d15f6cd53e"
+  integrity sha512-uRaUFmCl8e0Y3KxjaHUYlkCPS5OtwtfTChkdpoZuBKDXqerCPTjPu+uvlun3rYUSYxScwVf2LZCI0Hfw4Vc+WQ==
+  dependencies:
+    ag-charts-core "12.3.1"
+    ag-charts-locale "12.3.1"
+    ag-charts-types "12.3.1"
+
+ag-charts-core@12.3.1:
+  version "12.3.1"
+  resolved "https://registry.yarnpkg.com/ag-charts-core/-/ag-charts-core-12.3.1.tgz#7e0b8b9b5fd8b9e54f9d10be3cc096b6e545f20e"
+  integrity sha512-711UJ0fXengb8+4PEW4nlzWDowmbYymPcjW2eJWHRzzvttUf14hnh+wP/l/s3EGVgYkEHe9vkXFwmeOJUlkC0Q==
+  dependencies:
+    ag-charts-types "12.3.1"
+
+ag-charts-enterprise@12.3.1:
+  version "12.3.1"
+  resolved "https://registry.yarnpkg.com/ag-charts-enterprise/-/ag-charts-enterprise-12.3.1.tgz#b2d516a3f9a656ff3f29e87fa798ea5522d7e0a4"
+  integrity sha512-2sQIwLfksRTcI4JVRjgQkyGq6z68UVTO/I91HKmtpukrQLsW/o0TzzHmgTtVJOXd9yO9gx2KWa2DMg0+FKdXEQ==
+  dependencies:
+    ag-charts-community "12.3.1"
+    ag-charts-core "12.3.1"
+
+ag-charts-locale@12.3.1:
+  version "12.3.1"
+  resolved "https://registry.yarnpkg.com/ag-charts-locale/-/ag-charts-locale-12.3.1.tgz#bdeddf25ed0f961793345fa53ad81b752b887cf2"
+  integrity sha512-dCn7oHh3xLI576FT514aBedNQgtb5zwh/Gcj7jHvjOWYRnfH8kaekZzLzntITA6dF6E78okJfoI7CUCbYduQ4Q==
+
 ag-charts-types@12.3.1:
   version "12.3.1"
   resolved "https://registry.yarnpkg.com/ag-charts-types/-/ag-charts-types-12.3.1.tgz#237d69cfaf27605c9bb49a1028a87632a91e653a"
@@ -533,6 +562,16 @@ ag-grid-community@34.3.1:
   integrity sha512-PwlrPudsFOzGumphi2y9ihWeaUlIwKhOra/MXu2LjeV2U8DgLLcYS8CartE5Hszhn1poJHawwI9HWrxlKliwdw==
   dependencies:
     ag-charts-types "12.3.1"
+
+ag-grid-enterprise@^34.3.1:
+  version "34.3.1"
+  resolved "https://registry.yarnpkg.com/ag-grid-enterprise/-/ag-grid-enterprise-34.3.1.tgz#018db2b70850ce212747a3bf131b49295d63e064"
+  integrity sha512-pee4Zh0gLeQED+RM+ofxNun9JSrYrE0ZVw90BibuBkhBCLXrtXtjGPiwM+Ylntl+GwJUuCXrTcVLXRHpdXVYbQ==
+  dependencies:
+    ag-grid-community "34.3.1"
+  optionalDependencies:
+    ag-charts-community "12.3.1"
+    ag-charts-enterprise "12.3.1"
 
 ag-grid-react@^34.3.1:
   version "34.3.1"
