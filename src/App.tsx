@@ -36,9 +36,22 @@ interface HeaderModel {
   maxDepth: number;
 }
 
-const isRowSelection = (a: HeaderInfo, b: HeaderInfo) => {
-  // 같은 row(depthStart)에서 시작해야 rowSelection 가능
-  return a.depthStart === b.depthStart && a.depthEnd === b.depthEnd;
+const findSameRowModel = (model: HeaderInfo[], a: HeaderInfo, b: HeaderInfo) => {
+  const isSameDepth = a.depthStart === b.depthStart && a.depthEnd === b.depthEnd;
+  if (!isSameDepth) return null;
+  const findIdxA = model.findIndex(header => header.uniqueId === a.uniqueId);
+  const findIdxB = model.findIndex(header => header.uniqueId === b.uniqueId);
+  const filterInRangeModel = model.slice(Math.min(findIdxA, findIdxB), Math.max(findIdxA, findIdxB) + 1);
+  const crossedModels = filterInRangeModel.filter(
+    header => Math.max(a.depthStart, header.depthStart) <= Math.min(a.depthEnd, header.depthEnd)
+  );
+
+  // 겹치는 구간 중에 넘치는 구간을 가진 column이 있는 지 확인
+  const hasTouchedModel = crossedModels.some(h => h.depthStart < a.depthStart || h.depthEnd > a.depthEnd);
+  if (hasTouchedModel) return null;
+
+  // 없다면 return true
+  return new Set(crossedModels.map(header => header.id));
 };
 
 const buildHeaderModelFromGroups = (columnApi: GridApi): HeaderModel => {
@@ -207,6 +220,11 @@ const computeSelectionFromGroups = (
   const infoB = getHeaderInfo(model, target.id, target.uniqueId);
   if (!infoA || !infoB) return { selectedIds: [] };
 
+  const sameRowModel = findSameRowModel(model, infoA, infoB); // 있으면 배열 없으면 false
+  if (sameRowModel) {
+    return { selectedIds: Array.from(sameRowModel) };
+  }
+
   const origStart = Math.min(infoA.leafStart, infoB.leafStart);
   const origEnd = Math.max(infoA.leafEnd, infoB.leafEnd);
 
@@ -258,8 +276,6 @@ const computeSelectionFromGroups = (
         h.leafEnd >= origStart &&
         h.leafStart <= origEnd
     );
-
-    console.log(' sameRowHeaders:', sameRowHeaders);
 
     if (sameRowHeaders.length > 0) {
       const minStart = Math.min(...sameRowHeaders.map(r => r.leafStart));
