@@ -212,7 +212,7 @@ const getHeaderInfo = (model: HeaderInfo[], id: string, uniqueId: string): Heade
 const computeSelectionFromGroups = (
   model: HeaderInfo[],
   minDepth: number,
-  maxDepth: number, // 지금은 직접 쓰진 않지만 시그니처 유지
+  maxDepth: number,
   anchor: SelectInfo,
   target: SelectInfo
 ): { selectedIds: string[] } => {
@@ -220,96 +220,99 @@ const computeSelectionFromGroups = (
   const infoB = getHeaderInfo(model, target.id, target.uniqueId);
   if (!infoA || !infoB) return { selectedIds: [] };
 
-  const sameRowModel = findSameRowModel(model, infoA, infoB); // 있으면 배열 없으면 false
+  // 같은 행에 있는 경우
+  const sameRowModel = findSameRowModel(model, infoA, infoB);
   if (sameRowModel) {
     return { selectedIds: Array.from(sameRowModel) };
   }
 
-  const origStart = Math.min(infoA.leafStart, infoB.leafStart);
-  const origEnd = Math.max(infoA.leafEnd, infoB.leafEnd);
+  // 엑셀 스타일: 두 클릭 지점 사이의 사각형 영역 정의
+  // 초기 사각형: 두 클릭 지점의 leaf 범위와 depth 범위
+  let rectLeafStart = Math.min(infoA.leafStart, infoB.leafStart);
+  let rectLeafEnd = Math.max(infoA.leafEnd, infoB.leafEnd);
+  let rectDepthStart = Math.min(infoA.depthStart, infoB.depthStart);
+  let rectDepthEnd = Math.max(infoA.depthEnd, infoB.depthEnd);
 
-  const forcedIds = new Set<string>();
+  // 반복적으로 경계에서 잘리는 헤더가 없도록 영역 확장
+  let changed = true;
+  while (changed) {
+    changed = false;
 
-  let selStart = origStart;
-  let selEnd = origEnd;
+    for (const h of model) {
+      // 수평 겹침이 없으면 무시
+      if (h.leafEnd < rectLeafStart || h.leafStart > rectLeafEnd) continue;
 
-  const baseDepth = Math.min(infoA.depthStart, infoB.depthStart);
+      // 이 헤더가 현재 사각형과 겹치면서 경계를 넘어가면(잘라진다면) 영역 확장
+      const overlapsHorizontally = h.leafStart <= rectLeafEnd && h.leafEnd >= rectLeafStart;
+      const overlapsVertically = h.depthStart <= rectDepthEnd && h.depthEnd >= rectDepthStart;
 
-  const expandByAncestors = (self: HeaderInfo, other: HeaderInfo) => {
-    const ancestors = getAncestors(model, self);
+      if (overlapsHorizontally && overlapsVertically) {
+        // 헤더가 사각형 경계를 넘어가면 영역 확장
+        const needsExpansion =
+          h.leafStart < rectLeafStart ||
+          h.leafEnd > rectLeafEnd ||
+          h.depthStart < rectDepthStart ||
+          h.depthEnd > rectDepthEnd;
 
-    ancestors.forEach(g => {
-      // 너무 위(depthStart < baseDepth) 에 있는 조상은 band 확장에 쓰지 않음
-      if (g.depthStart < baseDepth) return;
+        if (needsExpansion) {
+          const newLeafStart = Math.min(rectLeafStart, h.leafStart);
+          const newLeafEnd = Math.max(rectLeafEnd, h.leafEnd);
+          const newDepthStart = Math.min(rectDepthStart, h.depthStart);
+          const newDepthEnd = Math.max(rectDepthEnd, h.depthEnd);
 
-      const otherInside = other.leafStart >= g.leafStart && other.leafEnd <= g.leafEnd;
-
-      // self 만 포함하는 조상이면 그 전체로 확장
-      if (!otherInside) {
-        selStart = Math.min(selStart, g.leafStart);
-        selEnd = Math.max(selEnd, g.leafEnd);
-        forcedIds.add(g.id);
+          if (
+            newLeafStart !== rectLeafStart ||
+            newLeafEnd !== rectLeafEnd ||
+            newDepthStart !== rectDepthStart ||
+            newDepthEnd !== rectDepthEnd
+          ) {
+            rectLeafStart = newLeafStart;
+            rectLeafEnd = newLeafEnd;
+            rectDepthStart = newDepthStart;
+            rectDepthEnd = newDepthEnd;
+            changed = true;
+          }
+        }
       }
-    });
-  };
-
-  // anchor / target 양쪽에 대해 대칭적으로 처리
-  expandByAncestors(infoA, infoB);
-  expandByAncestors(infoB, infoA);
-
-  // 2-1️⃣ band 안에 "full-depth 헤더" 가 하나라도 있으면
-  //      → 같은 행(minDepth)에 있는 형제 헤더 전체로 band 확장
-  // "full-depth 헤더"가 원래 band 안에 완전히 들어온 경우가 있는지
-  const existsFullDepthInBand = model.filter(h => h.leafStart > origStart && h.leafEnd < origEnd);
-
-  const bandMinDepth = Math.min(...existsFullDepthInBand.map(h => h.depthStart));
-
-  const existsFullDepthInBand2 = existsFullDepthInBand.filter(h => {
-    return isFullDepthHeader(model, h, bandMinDepth);
-  });
-
-  if (existsFullDepthInBand2) {
-    const sameRowHeaders = model.filter(
-      h =>
-        h.depthStart === bandMinDepth &&
-        // 밴드와 leaf 구간이 한 칸이라도 겹치면 포함
-        h.leafEnd >= origStart &&
-        h.leafStart <= origEnd
-    );
-
-    if (sameRowHeaders.length > 0) {
-      const minStart = Math.min(...sameRowHeaders.map(r => r.leafStart));
-      const maxEnd = Math.max(...sameRowHeaders.map(r => r.leafEnd));
-
-      selStart = Math.min(selStart, minStart);
-      selEnd = Math.max(selEnd, maxEnd);
-
-      sameRowHeaders.forEach(r => forcedIds.add(r.id));
     }
   }
 
-  const selectedLeafIds: string[] = [];
-  const selectedHeaderIds: string[] = [];
-
+  // 사각형 영역과 겹치는 모든 헤더 찾기
+  const overlappingHeaders: HeaderInfo[] = [];
   for (const h of model) {
-    // leaf 컬럼
-    if (h.kind === 'col') {
-      if (h.leafStart >= selStart && h.leafEnd <= selEnd) {
-        selectedLeafIds.push(h.id);
-        continue;
-      }
-      continue;
-    }
+    const overlapsHorizontally = h.leafStart <= rectLeafEnd && h.leafEnd >= rectLeafStart;
+    const overlapsVertically = h.depthStart <= rectDepthEnd && h.depthEnd >= rectDepthStart;
 
-    // 헤더 (group) – baseDepth 보다 위에 있는 애는 자동 선택하지 않음
-    if (h.leafStart >= selStart && h.leafEnd <= selEnd && h.depthStart >= baseDepth) {
-      selectedHeaderIds.push(h.id);
+    if (overlapsHorizontally && overlapsVertically) {
+      overlappingHeaders.push(h);
     }
   }
 
-  forcedIds.forEach(id => selectedHeaderIds.push(id));
+  // 엑셀 로직: 상위 헤더가 이미 완전히 포함되어 있으면 제외
+  // (하위 헤더들이 이미 선택되므로 상위 헤더는 중복 선택 불필요)
+  const selectedHeaders: HeaderInfo[] = [];
 
-  const selectedIds = Array.from(new Set([...selectedLeafIds, ...selectedHeaderIds]));
+  for (const h of overlappingHeaders) {
+    // 이 헤더가 다른 선택된 헤더에 완전히 포함되어 있는지 확인
+    const isFullyContained = overlappingHeaders.some(other => {
+      if (other.id === h.id) return false;
+      // other가 h의 조상이고 h를 완전히 포함하는지
+      return (
+        other.depthStart < h.depthStart &&
+        other.depthEnd >= h.depthEnd &&
+        other.leafStart <= h.leafStart &&
+        other.leafEnd >= h.leafEnd
+      );
+    });
+
+    // 완전히 포함되지 않은 헤더만 선택
+    if (!isFullyContained) {
+      selectedHeaders.push(h);
+    }
+  }
+
+  // 최종 선택된 ID들
+  const selectedIds = selectedHeaders.map(h => h.id);
 
   return { selectedIds };
 };
@@ -347,6 +350,17 @@ function App() {
       marryChildren: true,
       children: [
         {
+          headerName: 'A1-2',
+          field: 'a2',
+          colId: 'A1_2',
+        },
+        {
+          headerName: 'A1-3',
+          field: 'a3',
+          colId: 'A1_3',
+          marryChildren: true,
+        },
+        {
           headerName: 'A1-1',
           field: 'a1',
           children: [
@@ -361,17 +375,6 @@ function App() {
               colId: 'A1_1_2',
             },
           ],
-        },
-        {
-          headerName: 'A1-2',
-          field: 'a2',
-          colId: 'A1_2',
-        },
-        {
-          headerName: 'A1-3',
-          field: 'a3',
-          colId: 'A1_3',
-          marryChildren: true,
         },
       ],
     },
@@ -391,11 +394,39 @@ function App() {
               headerName: 'A2-1-1',
               field: 'a2-1-1',
               colId: 'a2_1_1',
+              children: [
+                {
+                  headerName: 'A2-1-1-1',
+                  field: 'a2-1-1-1',
+                  colId: 'a2_1-1-1',
+                  children: [
+                    {
+                      headerName: 'A2-1-1-1-1',
+                      field: 'a2-1-1-1-1',
+                      colId: 'a2_1-1-1-1',
+                    },
+                  ],
+                },
+              ],
             },
             {
               headerName: 'A2-1-2',
               field: 'a2-1-2',
               colId: 'a2_1_2',
+              children: [
+                {
+                  headerName: 'A2-1-2-1',
+                  field: 'a2-1-2-1',
+                  colId: 'a2_1-2-1',
+                  children: [
+                    {
+                      headerName: 'A2-1-2-1-1',
+                      field: 'a2-1-2-1-1',
+                      colId: 'a2_1-2-1-1',
+                    },
+                  ],
+                },
+              ],
             },
           ],
         },
@@ -409,11 +440,39 @@ function App() {
               headerName: 'A2-2-1',
               field: 'a2-2-1',
               colId: 'a2_2_1',
+              children: [
+                {
+                  headerName: 'A2-2-1-1',
+                  field: 'a2-2-1-1',
+                  colId: 'a2_2_1-1',
+                  children: [
+                    {
+                      headerName: 'A2-2-1-1-1',
+                      field: 'a2-2-1-1-1',
+                      colId: 'a2_2_1-1-1',
+                    },
+                  ],
+                },
+              ],
             },
             {
               headerName: 'A2-2-2',
               field: 'a2-2-2',
               colId: 'a2_2_2',
+              children: [
+                {
+                  headerName: 'A2-2-2-1',
+                  field: 'a2-2-2-1',
+                  colId: 'a2_2_2-1',
+                  children: [
+                    {
+                      headerName: 'A2-2-2-1-1',
+                      field: 'a2-2-2-1-1',
+                      colId: 'a2_2_2-1-1',
+                    },
+                  ],
+                },
+              ],
             },
           ],
         },
